@@ -1,113 +1,117 @@
 import java.awt.image.BufferedImage;
+import java.awt.Color;
 import java.io.File;
 import java.io.IOException;
 import java.util.Scanner;
-
 import javax.imageio.ImageIO;
 
 public class Steganography {
+
     public static void main(String[] args) throws IOException {
-        // Get image file path and secret message from user input
         Scanner scanner = new Scanner(System.in);
         System.out.print("Enter image file path: ");
         String imagePath = scanner.nextLine();
-        System.out.print("Enter secret message: ");
-        String secretMessage = scanner.nextLine();
-
-        // Hide secret message in image file
-        hideMessage(imagePath, secretMessage);
-
-        // Retrieve hidden message from image file
-        String retrievedMessage = retrieveMessage(imagePath);
-        System.out.println("Retrieved message: " + retrievedMessage);
-    }
-
-
-    public static void hideMessage(String imagePath, String secretMessage) throws IOException {
-        // Load image file
         BufferedImage image = ImageIO.read(new File(imagePath));
-        int width = image.getWidth();
-        int height = image.getHeight();
 
-        // Convert secret message to binary string
+        // hide secret message in the image
+        hideMessage(image, scanner);
+
+        // retrieve secret message from the image
+        retrieveMessage(image, scanner);
+    }
+
+    private static void hideMessage(BufferedImage image, Scanner scanner) throws IOException {
+        System.out.print("Enter secret message: ");
+        String message = scanner.nextLine();
+
+        // convert message to binary
         StringBuilder binaryMessage = new StringBuilder();
-        for (char c : secretMessage.toCharArray()) {
-            String binaryString = Integer.toBinaryString(c);
-            while (binaryString.length() < 8) {
-                binaryString = "0" + binaryString;
+        for (char c : message.toCharArray()) {
+            String binary = Integer.toBinaryString(c);
+            while (binary.length() < 8) {
+                binary = "0" + binary;
             }
-            binaryMessage.append(binaryString);
+            binaryMessage.append(binary);
         }
 
-        // Add null terminator to end of message
-        binaryMessage.append("00000000");
-
-        // Check if image file can hold secret message
-        if (binaryMessage.length() > (width * height)) {
-            throw new IllegalArgumentException("Image file is too small to hold secret message.");
+        // check if message can fit in the image
+        int imageWidth = image.getWidth();
+        int imageHeight = image.getHeight();
+        int maxMessageLength = imageWidth * imageHeight * 3 / 8;
+        if (binaryMessage.length() > maxMessageLength) {
+            System.out.println("Message is too long to hide in the image");
+            return;
         }
 
-        // Hide secret message in image file
-        int x = 0;
-        int y = 0;
-        for (int i = 0; i < binaryMessage.length(); i++) {
-            int rgb = image.getRGB(x, y);
+        // hide the binary message in the LSB of each pixel
+        int index = 0;
+        for (int y = 0; y < imageHeight; y++) {
+            for (int x = 0; x < imageWidth; x++) {
+                int pixel = image.getRGB(x, y);
+                int alpha = (pixel >> 24) & 0xff;
+                int red = (pixel >> 16) & 0xff;
+                int green = (pixel >> 8) & 0xff;
+                int blue = pixel & 0xff;
 
-            int red = (rgb >> 16) & 0xFF;
-            int green = (rgb >> 8) & 0xFF;
-            int blue = rgb & 0xFF;
+                if (index < binaryMessage.length()) {
+                    red = setLSB(red, binaryMessage.charAt(index++));
+                }
+                if (index < binaryMessage.length()) {
+                    green = setLSB(green, binaryMessage.charAt(index++));
+                }
+                if (index < binaryMessage.length()) {
+                    blue = setLSB(blue, binaryMessage.charAt(index++));
+                }
 
-            // Set least significant bit of red, green, or blue to the corresponding bit of the secret message
-            if (i < binaryMessage.length()) {
-                char bit = binaryMessage.charAt(i);
-                if (bit == '0') {
-                    red = red & 0xFE;
-                } else {
-                    red = red | 0x01;
-                }
-                i++;
-            }
-            if (i < binaryMessage.length()) {
-                char bit = binaryMessage.charAt(i);
-                if (bit == '0') {
-                    green = green & 0xFE;
-                } else {
-                    green = green | 0x01;
-                }
-                i++;
-            }
-            if (i < binaryMessage.length()) {
-                char bit = binaryMessage.charAt(i);
-                if (bit == '0') {
-                    blue = blue & 0xFE;
-                } else {
-                    blue = blue | 0x01;
-                }
-                i++;
-            }
-
-            // Set new RGB value
-            rgb = (red << 16) | (green << 8) | blue;
-            image.setRGB(x, y, rgb);
-
-            // Move to next pixel
-            x++;
-            if (x >= width) {
-                x = 0;
-                y++;
-                if (y >= height) {
-                    throw new IllegalArgumentException("Image file is too small to hold secret message.");
-                }
+                int newPixel = (alpha << 24) | (red << 16) | (green << 8) | blue;
+                image.setRGB(x, y, newPixel);
             }
         }
 
-        // Save modified image file
-        File outputImage = new File(imagePath);
-        ImageIO.write(image, "png", outputImage);
+        // save the image with the hidden message
+        System.out.print("Enter output file path: ");
+        String outputImagePath = scanner.nextLine();
+        ImageIO.write(image, "png", new File(outputImagePath));
+        System.out.println("Message hidden in the image successfully");
     }
 
-    private static String retrieveMessage(String imagePath) {
-        return null;
-    }
+    private static void retrieveMessage(BufferedImage image, Scanner scanner) {
+                // retrieve binary message from the LSB of each pixel
+                String binaryMessage = "";
+                int imageWidth = image.getWidth();
+                int imageHeight = image.getHeight();
+                for (int y = 0; y < imageHeight; y++) {
+                    for (int x = 0; x < imageWidth; x++) {
+                        Color pixel = new Color(image.getRGB(x, y));
+                        int red = pixel.getRed();
+                        int green = pixel.getGreen();
+                        int blue = pixel.getBlue();
+        
+                        binaryMessage += GetLSB(red);
+                        binaryMessage += GetLSB(green);
+                        binaryMessage += GetLSB(blue);
+                    }
+                }
+        
+                // convert binary message to string
+                String message = "";
+                for (int i = 0; i < binaryMessage.length(); i += 8) {
+                    String binary = binaryMessage.substring(i, i + 8);
+                    char c = (char) Integer.parseInt(binary, 2);
+                    message += c;
+                }
+        
+                System.out.println("Secret message retrieved from the image:");
+                System.out.println(message);
+            }
+        
+            private static String GetLSB(int value) {
+                return Integer.toString(value & 1);
+            }
+
+            private static int setLSB(int blue, char charAt) {
+                return 0;
+            }
 }
+
 
